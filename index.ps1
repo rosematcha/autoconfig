@@ -18,6 +18,9 @@
 .PARAMETER SkipSoftware
     Skip software installation (winget + custom downloads)
     
+.PARAMETER SkipDev
+    Skip developer tools (Node, VS Code, Wifiman, GitHub Desktop, Antigravity)
+    
 .PARAMETER SkipConfigs
     Skip deploying configuration files
     
@@ -43,6 +46,7 @@ param(
     [switch]$SkipActivation,
     [switch]$SkipTweaks,
     [switch]$SkipSoftware,
+    [switch]$SkipDev,
     [switch]$SkipConfigs,
     [switch]$SkipSSH,
     [switch]$SkipWSL
@@ -152,6 +156,7 @@ if ($Unattended) { $activeFlags += "Unattended" }
 if ($SkipActivation) { $activeFlags += "SkipActivation" }
 if ($SkipTweaks) { $activeFlags += "SkipTweaks" }
 if ($SkipSoftware) { $activeFlags += "SkipSoftware" }
+if ($SkipDev) { $activeFlags += "SkipDev" }
 if ($SkipConfigs) { $activeFlags += "SkipConfigs" }
 if ($SkipSSH) { $activeFlags += "SkipSSH" }
 if ($SkipWSL) { $activeFlags += "SkipWSL" }
@@ -180,6 +185,7 @@ if (-not (Test-Administrator)) {
         if ($SkipActivation) { $argList += " -SkipActivation" }
         if ($SkipTweaks) { $argList += " -SkipTweaks" }
         if ($SkipSoftware) { $argList += " -SkipSoftware" }
+        if ($SkipDev) { $argList += " -SkipDev" }
         if ($SkipConfigs) { $argList += " -SkipConfigs" }
         if ($SkipSSH) { $argList += " -SkipSSH" }
         if ($SkipWSL) { $argList += " -SkipWSL" }
@@ -193,6 +199,7 @@ if (-not (Test-Administrator)) {
         if ($SkipActivation) { $flags += " -SkipActivation" }
         if ($SkipTweaks) { $flags += " -SkipTweaks" }
         if ($SkipSoftware) { $flags += " -SkipSoftware" }
+        if ($SkipDev) { $flags += " -SkipDev" }
         if ($SkipConfigs) { $flags += " -SkipConfigs" }
         if ($SkipSSH) { $flags += " -SkipSSH" }
         if ($SkipWSL) { $flags += " -SkipWSL" }
@@ -222,7 +229,14 @@ Write-Success "Temp directory ready: $TempDir"
 if (-not $SkipActivation) {
     Write-Step "Windows Activation (MAS)"
     
-    if (Confirm-Step "Activate Windows using MAS (HWID + Ohook)?") {
+    # Check if Windows is already activated
+    $licenseStatus = (Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "Name like 'Windows%'" | Where-Object { $_.PartialProductKey } | Select-Object -First 1).LicenseStatus
+    $isActivated = $licenseStatus -eq 1
+    
+    if ($isActivated) {
+        Write-Success "Windows is already activated"
+    }
+    elseif (Confirm-Step "Activate Windows using MAS (HWID + Ohook)?") {
         Write-Info "Running Microsoft Activation Scripts..."
         try {
             & ([ScriptBlock]::Create((Invoke-RestMethod https://get.activated.win))) /HWID /Ohook /S
@@ -270,7 +284,7 @@ if (-not $SkipSoftware) {
     
     if (Confirm-Step "Install software packages?") {
         Write-Info "Downloading software module..."
-        Invoke-RemoteScript -Url "$BaseUrl/modules/software.ps1"
+        Invoke-RemoteScript -Url "$BaseUrl/modules/software.ps1" -Parameters @{ SkipDev = $SkipDev }
     }
     else {
         Write-Info "Skipping software installation"

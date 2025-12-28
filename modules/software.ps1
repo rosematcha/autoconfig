@@ -3,6 +3,10 @@
     Software installation module - Winget packages and custom downloads
 #>
 
+param(
+    [switch]$SkipDev
+)
+
 $TempDir = "$env:TEMP\autoconfig"
 
 # ============================================================================
@@ -11,17 +15,24 @@ $TempDir = "$env:TEMP\autoconfig"
 
 Write-Host "  --> Installing winget packages..." -ForegroundColor Blue
 
+# Core packages (always installed)
 $wingetPackages = @(
-    "OpenJS.NodeJS",
     "7zip.7zip",
     "Mozilla.Firefox",
     "Bitwarden.Bitwarden",
     "Discord.Discord",
-    "OBSProject.OBSStudio",
-    "Microsoft.VisualStudioCode",
-    "Google.Antigravity",
-    "Ubiquiti.WiFimanDesktop"
+    "OBSProject.OBSStudio"
 )
+
+# Dev packages (skipped with -SkipDev)
+if (-not $SkipDev) {
+    $wingetPackages += @(
+        "OpenJS.NodeJS",
+        "Microsoft.VisualStudioCode",
+        "Google.Antigravity",
+        "Ubiquiti.WiFimanDesktop"
+    )
+}
 
 foreach ($package in $wingetPackages) {
     Write-Host "    Installing $package..." -ForegroundColor DarkGray
@@ -45,21 +56,26 @@ foreach ($package in $wingetPackages) {
 Write-Host "  [OK] Winget packages complete" -ForegroundColor Green
 
 # ============================================================================
-# GitHub Desktop
+# GitHub Desktop (skipped with -SkipDev)
 # ============================================================================
 
-Write-Host "  --> Installing GitHub Desktop..." -ForegroundColor Blue
+if (-not $SkipDev) {
+    Write-Host "  --> Installing GitHub Desktop..." -ForegroundColor Blue
 
-$githubDesktopUrl = "https://central.github.com/deployments/desktop/desktop/latest/win32"
-$githubDesktopPath = "$TempDir\GitHubDesktopSetup.exe"
+    $githubDesktopUrl = "https://central.github.com/deployments/desktop/desktop/latest/win32"
+    $githubDesktopPath = "$TempDir\GitHubDesktopSetup.exe"
 
-try {
-    Invoke-WebRequest -Uri $githubDesktopUrl -OutFile $githubDesktopPath -UseBasicParsing
-    Start-Process -FilePath $githubDesktopPath -ArgumentList "--silent" -Wait
-    Write-Host "  [OK] GitHub Desktop installed" -ForegroundColor Green
+    try {
+        Invoke-WebRequest -Uri $githubDesktopUrl -OutFile $githubDesktopPath -UseBasicParsing
+        Start-Process -FilePath $githubDesktopPath -ArgumentList "--silent" -Wait
+        Write-Host "  [OK] GitHub Desktop installed" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  [X] GitHub Desktop failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
 }
-catch {
-    Write-Host "  [X] GitHub Desktop failed: $($_.Exception.Message)" -ForegroundColor Red
+else {
+    Write-Host "  --> Skipping GitHub Desktop (SkipDev)" -ForegroundColor DarkGray
 }
 
 # ============================================================================

@@ -1,13 +1,19 @@
-# Windows Auto-Configuration
+# Reese's Windows Auto-Config
 
-Personal Windows setup automation script. Activates Windows, applies privacy/performance tweaks, installs software, and deploys configuration files.
+Setting up Windows is fun, but it can also suck. This script is designed to standardize my install process for Windows.
 
-## Quick Start
+## Usage
 
-Run in PowerShell (as Administrator):
+The defaults of this app are set to my needs.
 
 ```powershell
 irm https://windows.rosematcha.com/ | iex
+```
+
+For most people who are not me, I'd suggest adding the ``-SkipConfigs`` flag to skip adding my config files, and ``-SkipDev`` if you don't need developer tools. ``-Unattended`` is also nice to skip being prompted to confirm each step. 
+
+```powershell
+irm https://windows.rosematcha.com/ | iex -SkipConfigs -SkipDev -Unattended
 ```
 
 ## Flags
@@ -17,26 +23,11 @@ irm https://windows.rosematcha.com/ | iex
 | `-Unattended` | Run without confirmation prompts |
 | `-SkipActivation` | Skip Windows activation (MAS) |
 | `-SkipTweaks` | Skip Winutil tweaks & OneDrive removal |
-| `-SkipSoftware` | Skip software installation |
+| `-SkipSoftware` | Skip ALL software installation |
+| `-SkipDev` | Skip dev tools (Node, VS Code, etc.) |
 | `-SkipConfigs` | Skip config file deployment |
 | `-SkipSSH` | Skip SSH Server setup |
 | `-SkipWSL` | Skip WSL installation |
-
-### Examples
-
-```powershell
-# Full unattended setup
-irm https://windows.rosematcha.com/ | iex -Unattended
-
-# Corporate machine (skip activation)
-irm https://windows.rosematcha.com/ | iex -SkipActivation
-
-# Only install software and configs
-irm https://windows.rosematcha.com/ | iex -SkipActivation -SkipTweaks -SkipSSH -SkipWSL
-
-# Run locally with flags
-.\index.ps1 -Unattended -SkipActivation
-```
 
 ## What It Does
 
@@ -46,7 +37,15 @@ irm https://windows.rosematcha.com/ | iex -SkipActivation -SkipTweaks -SkipSSH -
 - Uses [Microsoft Activation Scripts](https://github.com/massgravel/Microsoft-Activation-Scripts)
 
 ### 2. System Tweaks
-- **Winutil** automation with pre-configured settings:
+- Disable Cortana
+- Disable web search in Start
+- Show file extensions
+- Show hidden files
+- Disable Windows Copilot
+- Disable Recall
+- Most of the work is done by [Winutil](https://github.com/Winutil/Winutil).
+<details>
+  <summary>Click here for full details.</summary>
   - Create restore point
   - Disable telemetry
   - Disable unnecessary services
@@ -57,18 +56,9 @@ irm https://windows.rosematcha.com/ | iex -SkipActivation -SkipTweaks -SkipSSH -
   - Enable "End Task" on taskbar
   - Delete temp files
   - Add Ultimate Performance power plan
-- **Aggressive OneDrive removal**
-  - Uninstall OneDrive
-  - Remove from Explorer sidebar
-  - Remove scheduled tasks
-  - Disable via Group Policy
-- Additional tweaks:
-  - Disable Cortana
-  - Disable web search in Start
-  - Show file extensions
-  - Show hidden files
-  - Disable Windows Copilot
-  - Disable Recall
+  - Remove OneDrive
+</details>
+
 
 ### 3. Software Installation
 
