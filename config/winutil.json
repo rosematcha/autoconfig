@@ -1,0 +1,12 @@
+{
+  "WPFTweaksRestorePoint": true,
+  "WPFTweaksTele": true,
+  "WPFTweaksServices": true,
+  "WPFTweaksDVR": true,
+  "WPFTweaksConsumerFeatures": true,
+  "WPFTweaksRemoveCopilot": true,
+  "WPFTweaksEdgeDebloat": true,
+  "WPFTweaksEndTaskOnTaskbar": true,
+  "WPFTweaksDeleteTempFiles": true,
+  "WPFAddUltPerf": true
+}

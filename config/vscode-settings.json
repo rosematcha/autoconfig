@@ -1,0 +1,41 @@
+{
+    "workbench.colorTheme": "Default Dark+",
+    "workbench.editor.empty.hint": "hidden",
+    "workbench.startupEditor": "none",
+    "github.copilot.nextEditSuggestions.enabled": true,
+    "security.allowedUNCHosts": [
+        "Persephone"
+    ],
+    "editor.minimap.enabled": false,
+    "chat.mcp.autostart": "newAndOutdated",
+    "chat.mcp.gallery.enabled": true,
+    "[html]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "liveServer.settings.donotShowInfoMsg": true,
+    "chat.tools.terminal.autoApprove": {
+        "npm install": true,
+        "npm run dev": true,
+        "npm run build": true,
+        "npm i": true,
+        "npx": true,
+        "node": true,
+        "npm ls": true,
+        "git checkout": true,
+        "npm run lint": true,
+        "npm run typecheck": true,
+        "npm run test": true,
+        "npm test": true,
+        "pytest": true,
+        "python": true,
+        "pnpm": true,
+        "powershell": true,
+        "Test-Path": true,
+        "New-Item": true,
+        "Remove-Item": true,
+        "Move-Item": true,
+        "Copy-Item": true,
+        "Out-File": true,
+        "Out-Null": true
+    }
+}

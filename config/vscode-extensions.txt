@@ -1,0 +1,16 @@
+# VS Code Extensions
+# Install with: code --install-extension <id>
+
+astro-build.astro-vscode
+beilunyang.cursor-rules
+esbenp.prettier-vscode
+github.copilot
+github.copilot-chat
+github.vscode-github-actions
+mechatroner.rainbow-csv
+ms-python.debugpy
+ms-python.python
+ms-python.vscode-pylance
+ms-python.vscode-python-envs
+ritwickdey.liveserver
+zaaack.markdown-editor
