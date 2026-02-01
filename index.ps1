@@ -50,10 +50,12 @@
 param(
     [switch]$Unattended,
 
-    [ValidateSet("Activation", "Tweaks", "Software", "Dev", "Configs", "SSH", "WSL")]
+    [AllowEmptyString()]
+    [AllowNull()]
     [string[]]$Skip,
 
-    [ValidateSet("Activation", "Tweaks", "Software", "Dev", "Configs", "SSH", "WSL")]
+    [AllowEmptyString()]
+    [AllowNull()]
     [string[]]$Only,
 
     # Legacy flags (still supported)
@@ -65,6 +67,33 @@ param(
     [switch]$SkipSSH,
     [switch]$SkipWSL
 )
+
+# ============================================================================
+# Parameter Validation
+# ============================================================================
+
+$validSteps = @("Activation", "Tweaks", "Software", "Dev", "Configs", "SSH", "WSL")
+
+# Filter out empty/null values and validate
+if ($Skip) {
+    $Skip = $Skip | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    foreach ($item in $Skip) {
+        if ($item -notin $validSteps) {
+            Write-Error "Invalid value '$item' for parameter Skip. Valid values are: $($validSteps -join ', ')"
+            exit 1
+        }
+    }
+}
+
+if ($Only) {
+    $Only = $Only | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    foreach ($item in $Only) {
+        if ($item -notin $validSteps) {
+            Write-Error "Invalid value '$item' for parameter Only. Valid values are: $($validSteps -join ', ')"
+            exit 1
+        }
+    }
+}
 
 # ============================================================================
 # Configuration
@@ -160,8 +189,6 @@ function Invoke-RemoteScript {
 # ============================================================================
 # Flag Normalization
 # ============================================================================
-
-$validSteps = @("Activation", "Tweaks", "Software", "Dev", "Configs", "SSH", "WSL")
 
 $skipSet = New-Object System.Collections.Generic.HashSet[string] ([StringComparer]::OrdinalIgnoreCase)
 $onlySet = New-Object System.Collections.Generic.HashSet[string] ([StringComparer]::OrdinalIgnoreCase)
