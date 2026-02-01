@@ -8,33 +8,39 @@
     
 .PARAMETER Unattended
     Run without any confirmation prompts
+
+.PARAMETER Skip
+    Skip one or more steps (Activation, Tweaks, Software, Dev, Configs, SSH, WSL)
+
+.PARAMETER Only
+    Run only specific steps (Activation, Tweaks, Software, Dev, Configs, SSH, WSL)
     
 .PARAMETER SkipActivation
-    Skip Windows activation (for corporate/pre-activated machines)
+    Legacy alias for -Skip Activation
     
 .PARAMETER SkipTweaks
-    Skip Winutil tweaks and OneDrive removal
+    Legacy alias for -Skip Tweaks
     
 .PARAMETER SkipSoftware
-    Skip software installation (winget + custom downloads)
+    Legacy alias for -Skip Software
     
 .PARAMETER SkipDev
-    Skip developer tools (Node, VS Code, Wifiman, GitHub Desktop, Antigravity)
+    Legacy alias for -Skip Dev
     
 .PARAMETER SkipConfigs
-    Skip deploying configuration files
+    Legacy alias for -Skip Configs
     
 .PARAMETER SkipSSH
-    Skip SSH Server setup
+    Legacy alias for -Skip SSH
     
 .PARAMETER SkipWSL
-    Skip WSL installation
+    Legacy alias for -Skip WSL
     
 .EXAMPLE
     irm https://windows.rosematcha.com/ | iex
     
 .EXAMPLE
-    .\index.ps1 -Unattended -SkipActivation
+    .\index.ps1 -Unattended -Skip Activation
     
 .NOTES
     Author: Reese
@@ -43,6 +49,14 @@
 
 param(
     [switch]$Unattended,
+
+    [ValidateSet("Activation", "Tweaks", "Software", "Dev", "Configs", "SSH", "WSL")]
+    [string[]]$Skip,
+
+    [ValidateSet("Activation", "Tweaks", "Software", "Dev", "Configs", "SSH", "WSL")]
+    [string[]]$Only,
+
+    # Legacy flags (still supported)
     [switch]$SkipActivation,
     [switch]$SkipTweaks,
     [switch]$SkipSoftware,
@@ -62,6 +76,15 @@ $TempDir = "$env:TEMP\autoconfig"
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+function Initialize-Tls {
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    }
+    catch {
+        # Best-effort only; do not block execution
+    }
+}
 
 function Write-Step {
     param([string]$Message)
@@ -122,7 +145,7 @@ function Invoke-RemoteScript {
     )
     
     try {
-        $script = Invoke-RestMethod -Uri $Url -UseBasicParsing
+        $script = Invoke-RestMethod -Uri $Url -UseBasicParsing -ErrorAction Stop
         $scriptBlock = [ScriptBlock]::Create($script)
         & $scriptBlock @Parameters
     }
@@ -132,6 +155,79 @@ function Invoke-RemoteScript {
         return $false
     }
     return $true
+}
+
+# ============================================================================
+# Flag Normalization
+# ============================================================================
+
+$validSteps = @("Activation", "Tweaks", "Software", "Dev", "Configs", "SSH", "WSL")
+
+$skipSet = New-Object System.Collections.Generic.HashSet[string] ([StringComparer]::OrdinalIgnoreCase)
+$onlySet = New-Object System.Collections.Generic.HashSet[string] ([StringComparer]::OrdinalIgnoreCase)
+
+if ($Skip) {
+    foreach ($item in $Skip) {
+        if ($item) { $null = $skipSet.Add($item) }
+    }
+}
+
+if ($Only) {
+    foreach ($item in $Only) {
+        if ($item) { $null = $onlySet.Add($item) }
+    }
+}
+
+$legacyFlagsUsed = $false
+if ($SkipActivation) { $null = $skipSet.Add("Activation"); $legacyFlagsUsed = $true }
+if ($SkipTweaks) { $null = $skipSet.Add("Tweaks"); $legacyFlagsUsed = $true }
+if ($SkipSoftware) { $null = $skipSet.Add("Software"); $legacyFlagsUsed = $true }
+if ($SkipDev) { $null = $skipSet.Add("Dev"); $legacyFlagsUsed = $true }
+if ($SkipConfigs) { $null = $skipSet.Add("Configs"); $legacyFlagsUsed = $true }
+if ($SkipSSH) { $null = $skipSet.Add("SSH"); $legacyFlagsUsed = $true }
+if ($SkipWSL) { $null = $skipSet.Add("WSL"); $legacyFlagsUsed = $true }
+
+$useOnly = $onlySet.Count -gt 0
+
+$orderedOnly = $validSteps | Where-Object { $onlySet.Contains($_) }
+$orderedSkip = $validSteps | Where-Object { $skipSet.Contains($_) }
+
+$runActivation = if ($useOnly) { $onlySet.Contains("Activation") } else { -not $skipSet.Contains("Activation") }
+$runTweaks = if ($useOnly) { $onlySet.Contains("Tweaks") } else { -not $skipSet.Contains("Tweaks") }
+$runConfigs = if ($useOnly) { $onlySet.Contains("Configs") } else { -not $skipSet.Contains("Configs") }
+$runSSH = if ($useOnly) { $onlySet.Contains("SSH") } else { -not $skipSet.Contains("SSH") }
+$runWSL = if ($useOnly) { $onlySet.Contains("WSL") } else { -not $skipSet.Contains("WSL") }
+
+$includeCore = if ($useOnly) { $onlySet.Contains("Software") } else { -not $skipSet.Contains("Software") }
+$includeDev = if ($useOnly) { $onlySet.Contains("Dev") } else { $includeCore -and -not $skipSet.Contains("Dev") }
+
+if ($skipSet.Contains("Software")) { $includeCore = $false; $includeDev = $false }
+if ($skipSet.Contains("Dev")) { $includeDev = $false }
+
+$runSoftware = $includeCore -or $includeDev
+
+$softwareGroups = @()
+if ($includeCore) { $softwareGroups += "Core" }
+if ($includeDev) { $softwareGroups += "Dev" }
+
+function Get-RunArguments {
+    param(
+        [string[]]$OnlyList,
+        [string[]]$SkipList,
+        [switch]$Unattended
+    )
+
+    $args = @()
+    if ($Unattended) { $args += "-Unattended" }
+    foreach ($item in $OnlyList) {
+        $args += "-Only"
+        $args += $item
+    }
+    foreach ($item in $SkipList) {
+        $args += "-Skip"
+        $args += $item
+    }
+    return $args
 }
 
 # ============================================================================
@@ -153,18 +249,17 @@ Write-Host @"
 # Show active flags
 $activeFlags = @()
 if ($Unattended) { $activeFlags += "Unattended" }
-if ($SkipActivation) { $activeFlags += "SkipActivation" }
-if ($SkipTweaks) { $activeFlags += "SkipTweaks" }
-if ($SkipSoftware) { $activeFlags += "SkipSoftware" }
-if ($SkipDev) { $activeFlags += "SkipDev" }
-if ($SkipConfigs) { $activeFlags += "SkipConfigs" }
-if ($SkipSSH) { $activeFlags += "SkipSSH" }
-if ($SkipWSL) { $activeFlags += "SkipWSL" }
+if ($orderedOnly.Count -gt 0) { $activeFlags += ("Only: " + ($orderedOnly -join ", ")) }
+if ($orderedSkip.Count -gt 0) { $activeFlags += ("Skip: " + ($orderedSkip -join ", ")) }
 
 if ($activeFlags.Count -gt 0) {
     Write-Host "  Flags: " -ForegroundColor DarkGray -NoNewline
-    Write-Host ($activeFlags -join ", ") -ForegroundColor Yellow
+    Write-Host ($activeFlags -join " | ") -ForegroundColor Yellow
     Write-Host ""
+}
+
+if ($legacyFlagsUsed) {
+    Write-Warn "Legacy skip flags detected. Prefer -Skip/-Only for new usage."
 }
 
 # ============================================================================
@@ -172,43 +267,33 @@ if ($activeFlags.Count -gt 0) {
 # ============================================================================
 
 Write-Step "Pre-flight Checks"
+Initialize-Tls
 
 # Check for admin privileges
 if (-not (Test-Administrator)) {
     Write-Warn "Not running as Administrator. Elevating..."
     
     $scriptPath = $MyInvocation.MyCommand.Path
+    $runArgs = Get-RunArguments -OnlyList $orderedOnly -SkipList $orderedSkip -Unattended:$Unattended
     if ($scriptPath) {
         # Running from file
-        $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
-        if ($Unattended) { $argList += " -Unattended" }
-        if ($SkipActivation) { $argList += " -SkipActivation" }
-        if ($SkipTweaks) { $argList += " -SkipTweaks" }
-        if ($SkipSoftware) { $argList += " -SkipSoftware" }
-        if ($SkipDev) { $argList += " -SkipDev" }
-        if ($SkipConfigs) { $argList += " -SkipConfigs" }
-        if ($SkipSSH) { $argList += " -SkipSSH" }
-        if ($SkipWSL) { $argList += " -SkipWSL" }
-        
-        Start-Process powershell.exe -ArgumentList $argList -Verb RunAs
+        $argList = @(
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "`"$scriptPath`""
+        )
+        $argList += $runArgs
+        Start-Process powershell.exe -ArgumentList ($argList -join " ") -Verb RunAs
     }
     else {
         # Running from irm | iex - need to re-download with elevation
-        $flags = ""
-        if ($Unattended) { $flags += " -Unattended" }
-        if ($SkipActivation) { $flags += " -SkipActivation" }
-        if ($SkipTweaks) { $flags += " -SkipTweaks" }
-        if ($SkipSoftware) { $flags += " -SkipSoftware" }
-        if ($SkipDev) { $flags += " -SkipDev" }
-        if ($SkipConfigs) { $flags += " -SkipConfigs" }
-        if ($SkipSSH) { $flags += " -SkipSSH" }
-        if ($SkipWSL) { $flags += " -SkipWSL" }
-        
-        $command = "irm $BaseUrl | iex"
-        if ($flags) {
-            $command = "`$params = @{$($flags.Trim().Replace(' -', ';') -replace ';(\w+)', '$1=$true')}; iex `"& { `$(irm $BaseUrl) } @params`""
+        $commandArgs = $runArgs -join " "
+        $command = "& { $(Invoke-RestMethod '$BaseUrl') }"
+        if ($commandArgs) {
+            $command += " $commandArgs"
         }
-        
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$command`"" -Verb RunAs
     }
     exit
@@ -226,20 +311,26 @@ Write-Success "Temp directory ready: $TempDir"
 # Step 1: Windows Activation
 # ============================================================================
 
-if (-not $SkipActivation) {
+if ($runActivation) {
     Write-Step "Windows Activation (MAS)"
     
     # Check if Windows is already activated
-    $licenseStatus = (Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "Name like 'Windows%'" | Where-Object { $_.PartialProductKey } | Select-Object -First 1).LicenseStatus
+    $license = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter "Name like 'Windows%'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.PartialProductKey } |
+        Select-Object -First 1
+    $licenseStatus = $license.LicenseStatus
     $isActivated = $licenseStatus -eq 1
     
     if ($isActivated) {
         Write-Success "Windows is already activated"
     }
+    elseif ($null -eq $licenseStatus) {
+        Write-Warn "Unable to determine activation status"
+    }
     elseif (Confirm-Step "Activate Windows using MAS (HWID + Ohook)?") {
         Write-Info "Running Microsoft Activation Scripts..."
         try {
-            & ([ScriptBlock]::Create((Invoke-RestMethod https://get.activated.win))) /HWID /Ohook /S
+            & ([ScriptBlock]::Create((Invoke-RestMethod https://get.activated.win -ErrorAction Stop))) /HWID /Ohook /S
             Write-Success "Windows activation complete"
         }
         catch {
@@ -252,19 +343,21 @@ if (-not $SkipActivation) {
 }
 else {
     Write-Step "Windows Activation"
-    Write-Info "Skipped (SkipActivation flag)"
+    Write-Info "Skipped (flags)"
 }
 
 # ============================================================================
 # Step 2: System Tweaks
 # ============================================================================
 
-if (-not $SkipTweaks) {
+if ($runTweaks) {
     Write-Step "System Tweaks (Winutil + OneDrive Removal)"
     
     if (Confirm-Step "Apply privacy/performance tweaks and remove OneDrive?") {
         Write-Info "Downloading tweaks module..."
-        Invoke-RemoteScript -Url "$BaseUrl/modules/tweaks.ps1"
+        if (-not (Invoke-RemoteScript -Url "$BaseUrl/modules/tweaks.ps1")) {
+            Write-Warn "Tweaks module failed"
+        }
     }
     else {
         Write-Info "Skipping system tweaks"
@@ -272,19 +365,22 @@ if (-not $SkipTweaks) {
 }
 else {
     Write-Step "System Tweaks"
-    Write-Info "Skipped (SkipTweaks flag)"
+    Write-Info "Skipped (flags)"
 }
 
 # ============================================================================
 # Step 3: Software Installation
 # ============================================================================
 
-if (-not $SkipSoftware) {
+if ($runSoftware) {
     Write-Step "Software Installation"
     
-    if (Confirm-Step "Install software packages?") {
+    $softwareNote = if ($includeCore -and $includeDev) { "core + dev" } elseif ($includeDev) { "dev only" } else { "core only" }
+    if (Confirm-Step "Install software packages ($softwareNote)?") {
         Write-Info "Downloading software module..."
-        Invoke-RemoteScript -Url "$BaseUrl/modules/software.ps1" -Parameters @{ SkipDev = $SkipDev }
+        if (-not (Invoke-RemoteScript -Url "$BaseUrl/modules/software.ps1" -Parameters @{ SoftwareGroups = $softwareGroups })) {
+            Write-Warn "Software module failed"
+        }
     }
     else {
         Write-Info "Skipping software installation"
@@ -292,14 +388,14 @@ if (-not $SkipSoftware) {
 }
 else {
     Write-Step "Software Installation"
-    Write-Info "Skipped (SkipSoftware flag)"
+    Write-Info "Skipped (flags)"
 }
 
 # ============================================================================
 # Step 4: SSH Server
 # ============================================================================
 
-if (-not $SkipSSH) {
+if ($runSSH) {
     Write-Step "SSH Server Setup"
     
     if (Confirm-Step "Enable SSH Server?") {
@@ -336,14 +432,14 @@ if (-not $SkipSSH) {
 }
 else {
     Write-Step "SSH Server Setup"
-    Write-Info "Skipped (SkipSSH flag)"
+    Write-Info "Skipped (flags)"
 }
 
 # ============================================================================
 # Step 5: WSL
 # ============================================================================
 
-if (-not $SkipWSL) {
+if ($runWSL) {
     Write-Step "Windows Subsystem for Linux"
     
     if (Confirm-Step "Install WSL?") {
@@ -362,14 +458,14 @@ if (-not $SkipWSL) {
 }
 else {
     Write-Step "Windows Subsystem for Linux"
-    Write-Info "Skipped (SkipWSL flag)"
+    Write-Info "Skipped (flags)"
 }
 
 # ============================================================================
 # Step 6: Configuration Files
 # ============================================================================
 
-if (-not $SkipConfigs) {
+if ($runConfigs) {
     Write-Step "Configuration Files"
     
     if (Confirm-Step "Deploy personal configuration files?") {
@@ -382,7 +478,7 @@ if (-not $SkipConfigs) {
 }
 else {
     Write-Step "Configuration Files"
-    Write-Info "Skipped (SkipConfigs flag)"
+    Write-Info "Skipped (flags)"
 }
 
 # ============================================================================

@@ -10,10 +10,16 @@ The defaults of this app are set to my needs.
 irm https://windows.rosematcha.com/ | iex
 ```
 
-For most people who are not me, I'd suggest adding the ``-SkipConfigs`` flag to skip adding my config files, and ``-SkipDev`` if you don't need developer tools. ``-Unattended`` is also nice to skip being prompted to confirm each step. 
+For most people who are not me, I'd suggest skipping my config files and dev tools. ``-Unattended`` is also nice to skip being prompted to confirm each step. 
 
 ```powershell
-irm https://windows.rosematcha.com/ | iex -SkipConfigs -SkipDev -Unattended
+irm https://windows.rosematcha.com/ | iex -Skip Configs,Dev -Unattended
+```
+
+Run only a subset:
+
+```powershell
+irm https://windows.rosematcha.com/ | iex -Only Tweaks,Software
 ```
 
 ## Flags
@@ -21,13 +27,20 @@ irm https://windows.rosematcha.com/ | iex -SkipConfigs -SkipDev -Unattended
 | Flag | Description |
 |------|-------------|
 | `-Unattended` | Run without confirmation prompts |
-| `-SkipActivation` | Skip Windows activation (MAS) |
-| `-SkipTweaks` | Skip Winutil tweaks & OneDrive removal |
-| `-SkipSoftware` | Skip ALL software installation |
-| `-SkipDev` | Skip dev tools (Node, VS Code, etc.) |
-| `-SkipConfigs` | Skip config file deployment |
-| `-SkipSSH` | Skip SSH Server setup |
-| `-SkipWSL` | Skip WSL installation |
+| `-Skip` | Skip one or more steps: `Activation`, `Tweaks`, `Software`, `Dev`, `Configs`, `SSH`, `WSL` |
+| `-Only` | Run only specific steps (same values as `-Skip`) |
+
+Legacy flags are still supported for compatibility:
+
+| Legacy Flag | Equivalent |
+|------|-------------|
+| `-SkipActivation` | `-Skip Activation` |
+| `-SkipTweaks` | `-Skip Tweaks` |
+| `-SkipSoftware` | `-Skip Software` |
+| `-SkipDev` | `-Skip Dev` |
+| `-SkipConfigs` | `-Skip Configs` |
+| `-SkipSSH` | `-Skip SSH` |
+| `-SkipWSL` | `-Skip WSL` |
 
 ## What It Does
 

@@ -6,6 +6,13 @@
 $BaseUrl = "https://windows.rosematcha.com"
 $TempDir = "$env:TEMP\autoconfig"
 
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+}
+catch {
+    # Best-effort only
+}
+
 # ============================================================================
 # VS Code Configuration
 # ============================================================================
@@ -22,7 +29,7 @@ if (-not (Test-Path $vscodeUserDir)) {
 # Download and apply settings.json
 try {
     $settingsPath = "$vscodeUserDir\settings.json"
-    Invoke-WebRequest -Uri "$BaseUrl/config/vscode-settings.json" -OutFile $settingsPath -UseBasicParsing
+    Invoke-WebRequest -Uri "$BaseUrl/config/vscode-settings.json" -OutFile $settingsPath -UseBasicParsing -ErrorAction Stop
     Write-Host "    [OK] VS Code settings.json deployed" -ForegroundColor Green
 }
 catch {
@@ -31,18 +38,47 @@ catch {
 
 # Install VS Code extensions
 try {
-    $extensionsContent = Invoke-RestMethod -Uri "$BaseUrl/config/vscode-extensions.txt" -UseBasicParsing
+    $extensionsContent = Invoke-RestMethod -Uri "$BaseUrl/config/vscode-extensions.txt" -UseBasicParsing -ErrorAction Stop
     $extensions = $extensionsContent -split "`n" | Where-Object { $_.Trim() -ne "" }
     
-    Write-Host "    Installing extensions..." -ForegroundColor DarkGray
-    foreach ($ext in $extensions) {
-        $ext = $ext.Trim()
-        if ($ext -and -not $ext.StartsWith("#")) {
-            code --install-extension $ext --force 2>$null
-            Write-Host "      [OK] $ext" -ForegroundColor DarkGreen
+    $codeCommand = Get-Command code -ErrorAction SilentlyContinue
+    $codeExecutable = $null
+    if ($codeCommand) {
+        $codeExecutable = $codeCommand.Source
+    }
+    if (-not $codeExecutable) {
+        $codeCandidates = @(
+            "$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd",
+            "$env:ProgramFiles\Microsoft VS Code\bin\code.cmd",
+            "$env:ProgramFiles(x86)\Microsoft VS Code\bin\code.cmd"
+        )
+        foreach ($candidate in $codeCandidates) {
+            if (Test-Path $candidate) {
+                $codeExecutable = $candidate
+                break
+            }
         }
     }
-    Write-Host "    [OK] VS Code extensions installed" -ForegroundColor Green
+
+    if (-not $codeExecutable) {
+        Write-Host "    [!] VS Code CLI not found. Skipping extension install." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "    Installing extensions..." -ForegroundColor DarkGray
+        foreach ($ext in $extensions) {
+            $ext = $ext.Trim()
+            if ($ext -and -not $ext.StartsWith("#")) {
+                & $codeExecutable --install-extension $ext --force 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "      [OK] $ext" -ForegroundColor DarkGreen
+                }
+                else {
+                    Write-Host "      [!] $ext (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                }
+            }
+        }
+        Write-Host "    [OK] VS Code extensions installed" -ForegroundColor Green
+    }
 }
 catch {
     Write-Host "    [X] Failed to install extensions: $($_.Exception.Message)" -ForegroundColor Red
@@ -64,7 +100,7 @@ if (-not (Test-Path $opencodeDir)) {
 # Download and apply opencode.json
 try {
     $opencodeConfig = "$opencodeDir\opencode.json"
-    Invoke-WebRequest -Uri "$BaseUrl/config/opencode.json" -OutFile $opencodeConfig -UseBasicParsing
+    Invoke-WebRequest -Uri "$BaseUrl/config/opencode.json" -OutFile $opencodeConfig -UseBasicParsing -ErrorAction Stop
     Write-Host "    [OK] OpenCode config deployed" -ForegroundColor Green
 }
 catch {
@@ -92,7 +128,7 @@ if (Test-Path $firefoxProfilesDir) {
         foreach ($profile in $profiles) {
             try {
                 $userJsPath = Join-Path $profile.FullName "user.js"
-                Invoke-WebRequest -Uri "$BaseUrl/config/firefox-user.js" -OutFile $userJsPath -UseBasicParsing
+                Invoke-WebRequest -Uri "$BaseUrl/config/firefox-user.js" -OutFile $userJsPath -UseBasicParsing -ErrorAction Stop
                 Write-Host "    [OK] Firefox user.js deployed to $($profile.Name)" -ForegroundColor Green
             }
             catch {

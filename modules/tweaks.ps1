@@ -4,6 +4,18 @@
 #>
 
 $BaseUrl = "https://windows.rosematcha.com"
+$TempDir = "$env:TEMP\autoconfig"
+
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+}
+catch {
+    # Best-effort only
+}
+
+if (-not (Test-Path $TempDir)) {
+    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+}
 
 # ============================================================================
 # OneDrive Aggressive Removal
@@ -77,7 +89,7 @@ Write-Host "  --> Downloading Winutil configuration..." -ForegroundColor Blue
 # Download winutil config
 $winutilConfig = "$env:TEMP\autoconfig\winutil.json"
 try {
-    Invoke-WebRequest -Uri "$BaseUrl/config/winutil.json" -OutFile $winutilConfig -UseBasicParsing
+    Invoke-WebRequest -Uri "$BaseUrl/config/winutil.json" -OutFile $winutilConfig -UseBasicParsing -ErrorAction Stop
     Write-Host "  [OK] Winutil config downloaded" -ForegroundColor Green
 }
 catch {
@@ -90,8 +102,7 @@ Write-Host "    This may take several minutes..." -ForegroundColor DarkGray
 
 try {
     # Run Winutil with config
-    $winutilCommand = "& { `$(irm https://christitus.com/win) } -Config `"$winutilConfig`" -Run"
-    Invoke-Expression $winutilCommand
+    & ([ScriptBlock]::Create((Invoke-RestMethod https://christitus.com/win -ErrorAction Stop))) -Config "$winutilConfig" -Run
     Write-Host "  [OK] Winutil tweaks applied" -ForegroundColor Green
 }
 catch {
