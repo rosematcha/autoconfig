@@ -30,6 +30,112 @@ if (-not ($includeCore -or $includeDev)) {
 }
 
 # ============================================================================
+# GPU Driver Detection + Light Install via Windows Update
+# ============================================================================
+
+function Get-GpuVendors {
+    $vendors = New-Object System.Collections.Generic.HashSet[string] ([StringComparer]::OrdinalIgnoreCase)
+    try {
+        $gpus = Get-CimInstance -ClassName Win32_VideoController -ErrorAction Stop
+    }
+    catch {
+        $gpus = @()
+    }
+
+    foreach ($gpu in $gpus) {
+        $name = @($gpu.Name, $gpu.AdapterCompatibility) -join " "
+        if ($name -match "NVIDIA") { $null = $vendors.Add("NVIDIA") }
+        if ($name -match "AMD|Radeon") { $null = $vendors.Add("AMD") }
+        if ($name -match "Intel") { $null = $vendors.Add("Intel") }
+    }
+
+    return $vendors.ToArray()
+}
+
+function Install-GpuDriverUpdates {
+    param([string[]]$Vendors)
+
+    if (-not $Vendors -or $Vendors.Count -eq 0) {
+        Write-Host "  [!] No supported GPU vendor detected. Skipping driver updates." -ForegroundColor Yellow
+        return
+    }
+
+    $vendorRegex = ($Vendors | ForEach-Object { [regex]::Escape($_) }) -join "|"
+    Write-Host "  --> Checking GPU driver updates via Windows Update for: $($Vendors -join ', ')" -ForegroundColor Blue
+
+    try {
+        $session = New-Object -ComObject Microsoft.Update.Session
+        $searcher = $session.CreateUpdateSearcher()
+        $searchResult = $searcher.Search("IsInstalled=0 and Type='Driver'")
+
+        if ($searchResult.Updates.Count -eq 0) {
+            Write-Host "  [OK] No driver updates available" -ForegroundColor Green
+            return
+        }
+
+        $updatesToInstall = New-Object -ComObject Microsoft.Update.UpdateColl
+        for ($i = 0; $i -lt $searchResult.Updates.Count; $i++) {
+            $update = $searchResult.Updates.Item($i)
+            $title = $update.Title
+
+            $matchesVendor = $title -match $vendorRegex
+            $matchesDisplay = $title -match "(Display|Graphics|Video|VGA|GPU|Radeon|GeForce|Quadro|Arc|Iris)"
+
+            $matchesCategory = $false
+            foreach ($category in $update.Categories) {
+                if ($category.Name -match "(Display|Graphics|Video)") {
+                    $matchesCategory = $true
+                    break
+                }
+            }
+
+            if ($matchesVendor -and ($matchesDisplay -or $matchesCategory)) {
+                $null = $updatesToInstall.Add($update)
+            }
+        }
+
+        if ($updatesToInstall.Count -eq 0) {
+            Write-Host "  [OK] No matching GPU driver updates found" -ForegroundColor Green
+            return
+        }
+
+        for ($i = 0; $i -lt $updatesToInstall.Count; $i++) {
+            if (-not $updatesToInstall.Item($i).EulaAccepted) {
+                $updatesToInstall.Item($i).AcceptEula()
+            }
+        }
+
+        Write-Host "    Downloading driver updates..." -ForegroundColor DarkGray
+        $downloader = $session.CreateUpdateDownloader()
+        $downloader.Updates = $updatesToInstall
+        $downloadResult = $downloader.Download()
+
+        if ($downloadResult.ResultCode -ne 2) {
+            Write-Host "  [!] Driver download result: $($downloadResult.ResultCode)" -ForegroundColor Yellow
+        }
+
+        Write-Host "    Installing driver updates..." -ForegroundColor DarkGray
+        $installer = $session.CreateUpdateInstaller()
+        $installer.Updates = $updatesToInstall
+        $installResult = $installer.Install()
+
+        if ($installResult.ResultCode -eq 2) {
+            Write-Host "  [OK] GPU driver updates installed" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  [!] GPU driver install result: $($installResult.ResultCode)" -ForegroundColor Yellow
+        }
+
+        if ($installResult.RebootRequired) {
+            Write-Host "  [!] Reboot required to complete driver updates" -ForegroundColor Yellow
+        }
+    }
+    catch {
+        Write-Host "  [X] GPU driver update check failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# ============================================================================
 # Winget Packages
 # ============================================================================
 
@@ -82,7 +188,20 @@ else {
             Write-Host "    [X] $package failed: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
-    Write-Host "  [OK] Winget packages complete" -ForegroundColor Green
+Write-Host "  [OK] Winget packages complete" -ForegroundColor Green
+}
+
+# ============================================================================
+# GPU Drivers (Core group)
+# ============================================================================
+
+if ($includeCore) {
+    Write-Host "  --> Detecting GPU and installing light driver updates..." -ForegroundColor Blue
+    $gpuVendors = Get-GpuVendors
+    Install-GpuDriverUpdates -Vendors $gpuVendors
+}
+else {
+    Write-Host "  --> Skipping GPU driver updates (Core not selected)" -ForegroundColor DarkGray
 }
 
 # ============================================================================
@@ -153,6 +272,55 @@ if ($includeCore) {
 }
 else {
     Write-Host "  --> Skipping Helium browser (Core not selected)" -ForegroundColor DarkGray
+}
+
+# ============================================================================
+# Fan Control (Core group)
+# ============================================================================
+
+if ($includeCore) {
+    Write-Host "  --> Downloading Fan Control..." -ForegroundColor Blue
+
+    try {
+        $fanRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/Rem0o/FanControl.Releases/releases/latest" -UseBasicParsing -Headers @{ "User-Agent" = "autoconfig" } -ErrorAction Stop
+        $fanAssets = $fanRelease.assets
+
+        $fanAsset = $fanAssets | Where-Object { $_.name -match "FanControl.*\.zip$" } | Select-Object -First 1
+        if (-not $fanAsset) {
+            $fanAsset = $fanAssets | Where-Object { $_.name -match ".*Setup.*\.exe$" } | Select-Object -First 1
+        }
+        if (-not $fanAsset) {
+            $fanAsset = $fanAssets | Where-Object { $_.name -match "FanControl.*\.exe$" } | Select-Object -First 1
+        }
+
+        if ($fanAsset) {
+            $fanPath = "$TempDir\$($fanAsset.name)"
+            Invoke-WebRequest -Uri $fanAsset.browser_download_url -OutFile $fanPath -UseBasicParsing -ErrorAction Stop
+
+            if ($fanAsset.name -match "\.zip$") {
+                $fanInstallDir = "$env:ProgramFiles\FanControl"
+                if (-not (Test-Path $fanInstallDir)) {
+                    New-Item -ItemType Directory -Path $fanInstallDir -Force | Out-Null
+                }
+
+                Expand-Archive -Path $fanPath -DestinationPath $fanInstallDir -Force
+                Write-Host "  [OK] Fan Control extracted to $fanInstallDir" -ForegroundColor Green
+            }
+            else {
+                Start-Process -FilePath $fanPath -Wait
+                Write-Host "  [OK] Fan Control installer launched" -ForegroundColor Green
+            }
+        }
+        else {
+            Write-Host "  [X] Fan Control asset not found in release" -ForegroundColor Red
+        }
+    }
+    catch {
+        Write-Host "  [X] Fan Control failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+else {
+    Write-Host "  --> Skipping Fan Control (Core not selected)" -ForegroundColor DarkGray
 }
 
 # ============================================================================

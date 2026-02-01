@@ -86,9 +86,14 @@ Legacy flags are still supported for compatibility:
 - Google Antigravity
 - Ubiquiti WiFiman
 
+#### GPU Drivers (Windows Update)
+- Detects NVIDIA/AMD/Intel GPUs
+- Installs available display driver updates (driver-only)
+
 #### Custom Downloads
 - **GitHub Desktop** - Latest from GitHub CDN
 - **Helium Browser** - Latest from GitHub releases
+- **Fan Control** - Latest from GitHub releases
 - **VLC 4.0 Nightly** - Latest from VideoLAN artifacts
 
 ### 4. SSH Server
